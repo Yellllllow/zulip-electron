@@ -5,6 +5,7 @@ require(__dirname + '/js/tray.js');
 const DomainUtil = require(__dirname + '/js/utils/domain-util.js');
 const {linkIsInternal, skipImages} = require(__dirname + '/../main/link-helper');
 const {shell, ipcRenderer} = require('electron');
+const WebView = require(__dirname + '/js/components/webview.js');
 
 class ServerManagerView {
 	constructor() {
@@ -18,7 +19,7 @@ class ServerManagerView {
 		this.isLoading = false;
 		this.settingsTabIndex = -1;
 		this.activeTabIndex = -1;
-		this.zoomFactors = [];
+		this.webviews = [];
 	}
 
 	init() {
@@ -31,8 +32,16 @@ class ServerManagerView {
 	initTabs() {
 		const servers = this.domainUtil.getDomains();
 		if (servers.length > 0) {
-			for (const server of servers) {
+			for (let i = 0; i < servers.length;i++) {
+				const server = servers[i];
 				this.initTab(server);
+				this.webviews.push(new WebView({
+					$root: this.$content,
+					index: i,
+					url: server.url,
+					name: server.alias,
+					nodeIntegration: false
+				}))
 			}
 
 			this.activateTab(0);
@@ -54,46 +63,6 @@ class ServerManagerView {
 		const index = this.$tabsContainer.childNodes.length;
 		this.$tabsContainer.appendChild($tab);
 		$tab.addEventListener('click', this.activateTab.bind(this, index));
-	}
-
-	initWebView(url, index, nodeIntegration = false) {
-		const webViewTemplate = `
-			<webview
-				id="webview-${index}"
-				class="loading"
-				src="${url}"
-				${nodeIntegration ? 'nodeIntegration' : ''}
-				disablewebsecurity
-				preload="js/preload.js"
-				webpreferences="allowRunningInsecureContent, javascript=yes">
-			</webview>
-		`;
-		const $webView = this.insertNode(webViewTemplate);
-		this.$content.appendChild($webView);
-		this.isLoading = true;
-		this.registerListeners($webView, index);
-		this.zoomFactors[index] = 1;
-	}
-
-	startLoading(url, index) {
-		const $activeWebView = document.getElementById(`webview-${this.activeTabIndex}`);
-		if ($activeWebView) {
-			$activeWebView.classList.add('disabled');
-		}
-		const $webView = document.getElementById(`webview-${index}`);
-		if ($webView === null) {
-			this.initWebView(url, index, this.settingsTabIndex === index);
-		} else {
-			this.updateBadge(index);
-			$webView.classList.remove('disabled');
-			$webView.focus();
-		}
-	}
-
-	endLoading(index) {
-		const $webView = document.getElementById(`webview-${index}`);
-		this.isLoading = false;
-		$webView.classList.remove('loading');
 	}
 
 	initActions() {
@@ -120,28 +89,35 @@ class ServerManagerView {
 			template: settingsTabTemplate
 		});
 
-		this.settingsTabIndex = this.$tabsContainer.childNodes.length - 1;
-		this.activateTab(this.settingsTabIndex);
+		this.settingsTabIndex = this.webviews.length;
+		this.webviews.push(new WebView({
+			$root: this.$content,
+			index: this.settingsTabIndex,
+			url: url,
+			name: "Settings",
+			nodeIntegration: true
+		}));
+		this.activateTab(this.settingsTabIndex);		
 	}
 
 	activateTab(index) {
-		if (this.isLoading) {
-			return;
-		}
+		// if (this.webviews[index].loading) {
+		// 	return;
+		// }
 
 		if (this.activeTabIndex !== -1) {
 			if (this.activeTabIndex === index) {
 				return;
 			} else {
 				this.getTabAt(this.activeTabIndex).classList.remove('active');
+				this.webviews[this.activeTabIndex].hide();
 			}
 		}
 
 		const $tab = this.getTabAt(index);
 		$tab.classList.add('active');
 
-		const domain = $tab.getAttribute('domain');
-		this.startLoading(domain, index);
+		this.webviews[index].load();
 		this.activeTabIndex = index;
 	}
 
@@ -163,26 +139,6 @@ class ServerManagerView {
 		ipcRenderer.send('update-badge', messageCount);
 	}
 
-	registerListeners($webView, index) {
-		$webView.addEventListener('new-window', event => {
-			const {url} = event;
-			const domainPrefix = this.domainUtil.getDomain(this.activeTabIndex).url;
-			if (linkIsInternal(domainPrefix, url) && url.match(skipImages) === null) {
-				event.preventDefault();
-				return $webView.loadURL(url);
-			}
-			event.preventDefault();
-			shell.openExternal(url);
-		});
-		$webView.addEventListener('dom-ready', this.endLoading.bind(this, index));
-		$webView.addEventListener('dom-ready', () => {
-			// We need to wait until the page title is ready to get badge count
-			setTimeout(() => this.updateBadge(index), 1000);
-		});
-		$webView.addEventListener('dom-ready', () => {
-			$webView.focus();
-		});
-	}
 
 	registerIpcs() {
 		// ipcRenderer.on('reload', () => {
