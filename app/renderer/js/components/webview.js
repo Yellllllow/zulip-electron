@@ -9,15 +9,16 @@ class WebView extends BaseComponent {
 	constructor(params) {
 		super();
 	
-        const {$root, url, index, name, nodeIntegration} = params;
+        const {$root, url, index, name, onBadgeChange, nodeIntegration} = params;
         this.$root = $root;
         this.index = index;
         this.name = name;
         this.url = url;
         this.nodeIntegration = nodeIntegration;
-
-        this.zoomFactor = 1;
-        this.loading = true;
+        this.onBadgeChange = onBadgeChange;
+        this.zoomFactor = 1.0;
+        this.loading = false;
+        this.domainUtil = new DomainUtil();
 	}
 
 	template() {
@@ -64,8 +65,13 @@ class WebView extends BaseComponent {
 
     show() {
         this.$el.classList.remove('disabled');
-        this.$el.focus();
+        this.focus()
         this.loading = false;
+        this.onBadgeChange(this.getBadgeCount());
+    }
+
+    focus() {
+        this.$el.focus();
     }
 
     hide() {
@@ -74,11 +80,54 @@ class WebView extends BaseComponent {
 
     load() {
 		if (this.$el) {
-			// this.updateBadge(index);
 			this.show();
 		} else {
             this.init();
 		}
+    }
+
+    zoomIn() {
+        this.zoomFactor += 0.1;
+        this.$el.setZoomFactor(this.zoomFactor);
+    }
+
+    zoomOut() {
+        this.zoomFactor -= 0.1;
+        this.$el.setZoomFactor(this.zoomFactor);
+    }
+
+    zoomActualSize() {
+        this.zoomFactor = 1.0;
+        this.$el.setZoomFactor(this.zoomFactor);
+    }
+
+    logOut() {
+        this.$el.executeJavaScript('logout()');
+    }
+
+    showShortcut() {
+        this.$el.executeJavaScript('shortcut()');
+    }
+
+    openDevTools() {
+        this.$el.openDevTools();
+    }
+
+    back() {
+        if (this.$el.canGoBack()) {
+			this.$el.goBack();
+	    }
+    }
+
+    forward() {
+        if (this.$el.canGoForward()) {
+			this.$el.goForward();
+	    }
+    }
+
+    reload() {
+        this.hide();
+        this.$el.reload();
     }
 }
 
