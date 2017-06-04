@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 const DomainUtil = require(__dirname + '/../utils/domain-util.js');
 const {linkIsInternal, skipImages} = require(__dirname + '/../../../main/link-helper');
